@@ -231,3 +231,7 @@ This removes the `.venv` folder and `sdocx-cli`. It does not touch `notes-export
 ## Disclaimer
 
 This is an unofficial project, not affiliated with or endorsed by Samsung. Use it only on backups of your own devices.
+
+## License
+
+[MIT](LICENSE)
