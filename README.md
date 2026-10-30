@@ -13,10 +13,24 @@ Tested on macOS with Smart Switch 5.0.69.1. The code also handles Windows backup
 If you already have a backup and the tools installed:
 
 ```sh
-./run.sh
+just export
 ```
 
-Your PDFs appear in `notes-export/pdf/`. If this is your first time, follow the steps below.
+Your PDFs appear in `notes-export/pdf/`. If this is your first time, follow the steps below. If you already have the `.sdocx` files, see [If you already have the .sdocx files](#if-you-already-have-the-sdocx-files).
+
+Run `just` on its own to list every recipe:
+
+| Recipe | What it does |
+| --- | --- |
+| `just setup` | Creates the Python environment and installs its dependencies. The other recipes run this for you. |
+| `just install-cli` | Installs `sdocx-cli`, the program that makes the PDFs. Needs Rust. |
+| `just export [backup_dir] [out_dir]` | Decrypts a Smart Switch backup, extracts the `.sdocx` files, and makes PDFs. |
+| `just convert [sdocx_dir] [pdf_dir]` | Makes PDFs from `.sdocx` files you already have. No backup needed. |
+| `just note <file> [options]` | Makes a PDF from one `.sdocx` file. Options go to `sdocx-cli`, such as `-o out.pdf` or `--pages 1-3,5`. |
+| `just zip-sdocx [out_dir]` | Zips the `.sdocx` files into `samsung-notes-sdocx.zip` inside `out_dir`. |
+| `just zip-pdf [out_dir]` | Zips the PDFs into `samsung-notes-pdfs.zip` inside `out_dir`. |
+| `just clean [out_dir]` | Deletes the `_work` folder, if an interrupted export left one. |
+| `just uninstall` | Removes the Python environment and `sdocx-cli`. Keeps your exported notes. |
 
 ## Step by step
 
@@ -39,7 +53,7 @@ Your PDFs appear in `notes-export/pdf/`. If this is your first time, follow the 
 
 ### 3. Install what the tool needs
 
-You need Python, and Rust if you want PDFs.
+You need Python and [just](https://github.com/casey/just), and Rust if you want PDFs.
 
 1. Open the Terminal app.
 2. Check for Python by running `python3 --version`. If you get an error, install Python from [python.org](https://www.python.org/downloads/).
@@ -50,6 +64,7 @@ You need Python, and Rust if you want PDFs.
    ```
 
 4. Install Rust from [rustup.rs](https://rustup.rs), then close and reopen Terminal.
+5. Install just. With [Homebrew](https://brew.sh), run `brew install just`. For other options, see the [just install guide](https://github.com/casey/just#installation).
 
 ### 4. Download this tool
 
@@ -64,13 +79,21 @@ Otherwise, download the ZIP from this repository's page, unzip it, then type `cd
 
 ### 5. Run it
 
+Install `sdocx-cli`, the program that makes the PDFs. It takes a few minutes, and you only need to do it once:
+
 ```sh
-./run.sh
+just install-cli
 ```
 
-The script sets up what it needs, finds your backup, and exports your notes. The first run asks whether to install `sdocx-cli`, the program that makes the PDFs. Answer `y`. It takes a few minutes.
+Then export your notes:
 
-If you have several backups, the script asks which one to use.
+```sh
+just export
+```
+
+The recipe sets up what it needs, finds your backup, and exports your notes.
+
+If you have several backups, the tool asks which one to use.
 
 ### 6. Find your notes
 
@@ -83,12 +106,57 @@ Each file is named with the date the note was created, then the note's internal 
 
 Keep the `sdocx` folder. It is the original data, and you can use it to retry any note that failed to convert.
 
+## Ways to make a PDF
+
+| Starting from | Command | Use it when |
+| --- | --- | --- |
+| A Smart Switch backup | `just export [backup_dir] [out_dir]` | First export, or you have new notes on your device. Gives you `.sdocx` files and PDFs. |
+| A folder of `.sdocx` files | `just convert [sdocx_dir] [pdf_dir]` | You want to rebuild the PDFs, for example after downloading your notes from cloud storage. |
+| One `.sdocx` file | `just note note.sdocx -o note.pdf` | You want one note, or only some pages of it with `--pages 1-3,5`. |
+
+## What to keep
+
+Keep the `.sdocx` files. They are the original notes in their Samsung Notes folders, and you can rebuild the PDFs from them without the backup.
+
+```sh
+just zip-sdocx
+```
+
+| Item | Keep it? | Why |
+| --- | --- | --- |
+| `notes-export/sdocx/` | Yes | The original notes. Every PDF can be rebuilt from here. |
+| `notes-export/pdf/` | Optional | Lets you read notes without any tools, but a note that failed to convert has no PDF. Zip it with `just zip-pdf`. |
+| `notes-export/_work/` | No | A decrypted copy of the same notes. It should only exist if an export stopped early. Remove it with `just clean`. |
+| The Smart Switch backup | No | You do not need it once you have the `.sdocx` files, and it holds private data such as your IMEI. |
+
+Expect the zip to be only a little smaller than the folder, because `.sdocx` files and PDFs are already compressed. The zip is not encrypted, so encrypt it before you upload it.
+
+## If you already have the .sdocx files
+
+You do not need the Smart Switch backup to make PDFs again. The `.sdocx` files are enough, so you can keep only those, for example in cloud storage, and convert them when you need to. This step needs `sdocx-cli`, so run `just install-cli` first if it is not installed.
+
+Convert the files in `notes-export/sdocx/`:
+
+```sh
+just convert
+```
+
+Or choose the folders yourself:
+
+```sh
+just convert "/path/to/sdocx" "/path/to/pdf"
+```
+
+The tool searches `sdocx_dir` and its subfolders, and keeps the same folders under `pdf_dir`. If you leave out `pdf_dir`, the PDFs go in a `pdf` folder next to `sdocx_dir`. Existing PDFs with the same name are overwritten.
+
+`.sdocx` files are not encrypted. Encrypt them before you upload them, unless you trust the storage provider with every note.
+
 ## Other ways to run it
 
 Use a backup in a different folder, or write the export somewhere else:
 
 ```sh
-./run.sh "/path/to/backup" "/path/to/output"
+just export "/path/to/backup" "/path/to/output"
 ```
 
 The backup folder is the one that contains `backupHistoryInfo.xml` and `SAMSUNGNOTE/`.
@@ -98,13 +166,15 @@ Smart Switch normally saves backups in one of these folders, and the tool checks
 - `~/Samsung/SmartSwitch/Backup/`
 - `~/Documents/Samsung/SmartSwitch/Backup/`
 
-On Windows, there is no `run.sh`. Run these commands instead:
+On Windows, the recipes need a Unix-style shell, so run these commands instead:
 
 ```bat
 py -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 .venv\Scripts\python samsung_notes_export.py
 ```
+
+To convert existing `.sdocx` files, run `.venv\Scripts\python samsung_notes_export.py --convert [sdocx_dir] [pdf_dir]`.
 
 For PDFs, also install Rust and run the `cargo install` command shown in [Manual setup](#manual-setup).
 
@@ -115,18 +185,28 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 cargo install --git https://github.com/twangodev/sdocx sdocx-cli
 .venv/bin/python samsung_notes_export.py [backup_dir] [out_dir]
+.venv/bin/python samsung_notes_export.py --convert [sdocx_dir] [pdf_dir]
 ```
+
+## Uninstall
+
+```sh
+just uninstall
+```
+
+This removes the `.venv` folder and `sdocx-cli`. It does not touch `notes-export/`, your backups, Rust, Python, or just. Delete those yourself if you no longer want them.
 
 ## Troubleshooting
 
 | Message or problem | What to do |
 | --- | --- |
-| `No Smart Switch backup found` | Finish a backup first. If it is in another folder, pass that folder to `./run.sh`. |
+| `No Smart Switch backup found` | Finish a backup first. If it is in another folder, pass that folder to `just export`. |
+| `No .sdocx files found` | Check the folder you passed to `just convert`. Without one, it looks in `notes-export/sdocx/`. |
 | `Not found: .../SamsungNote.SNMM` | The backup has no notes. Run the backup again with Samsung Notes selected. |
 | `Could not decrypt the session Dummy` | The backup probably has a password. Make a new backup without one. |
-| `sdocx-cli not found; skipping PDF` | You still get the `.sdocx` files. Install Rust, then run `./run.sh` again. |
-| `permission denied: ./run.sh` | Run `chmod +x run.sh`, then try again. |
-| A few notes show `FAILED` | The `sdocx-cli` converter could not read those notes, which can happen with very large or unusual ones. Check for a newer `sdocx-cli`, or report the error to [that project](https://github.com/twangodev/sdocx/issues). Do not attach a private note. |
+| `sdocx-cli not found; skipping PDF` or `sdocx-cli: command not found` | You still have the `.sdocx` files. Install Rust, run `just install-cli`, then run `just convert`. |
+| `command not found: just` | Install just, as described in [step 3](#3-install-what-the-tool-needs). |
+| A few notes show `FAILED` | The `sdocx-cli` converter could not read those notes, which can happen with very large or unusual ones. Check for a newer `sdocx-cli`, export that note as a PDF from the Samsung Notes app, or report the error to [that project](https://github.com/twangodev/sdocx/issues). Do not attach a private note. |
 | The device is not detected | Try another USB cable or port, and check that the device is unlocked. |
 
 ## Privacy

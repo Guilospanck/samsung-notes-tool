@@ -6,13 +6,18 @@ Decrypts SAMSUNGNOTE/SamsungNote.SNMM, extracts every note as .sdocx
 
 Usage:
     python3 samsung_notes_export.py [backup_dir] [out_dir]
+    python3 samsung_notes_export.py --convert [sdocx_dir] [pdf_dir]
 
 Without backup_dir, looks for backups in the default Smart Switch folders.
 out_dir defaults to notes-export/ next to this script.
 
+--convert skips the backup and makes PDFs from existing .sdocx files.
+sdocx_dir defaults to notes-export/sdocx/, and pdf_dir to a pdf/ folder
+next to sdocx_dir.
+
 Needs: pycryptodome or cryptography (pip install pycryptodome).
-Optional: sdocx-cli for PDFs
-    cargo install --git https://github.com/twangodev/sdocx sdocx-cli
+Optional: sdocx-cli for PDFs (just install-cli, or:
+    cargo install --git https://github.com/twangodev/sdocx sdocx-cli)
 """
 import hashlib
 import json
@@ -142,10 +147,46 @@ def find_sdocx_cli():
     return shutil.which("sdocx-cli") or shutil.which(str(cargo_bin))
 
 
+def to_pdf(sources, sdocx_dir, pdf_dir):
+    """Convert sources to PDF, mirroring their folders under pdf_dir."""
+    cli = find_sdocx_cli()
+    if not cli:
+        print("sdocx-cli not found; skipping PDF. Install with:\n"
+              "  just install-cli")
+        return
+    failed = []
+    for i, src in enumerate(sources, 1):
+        dst = pdf_dir / src.relative_to(sdocx_dir).with_suffix(".pdf")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        r = subprocess.run([cli, str(src), "-o", str(dst)], capture_output=True, text=True)
+        print(f"\r  PDF {i}/{len(sources)}", end="", flush=True)
+        if r.returncode != 0 or not dst.exists():
+            failed.append((src, (r.stderr or r.stdout).strip().splitlines()[-1:]))
+    print()
+    print(f"PDFs in {pdf_dir} ({len(sources) - len(failed)} ok, {len(failed)} failed)")
+    for src, err in failed:
+        print(f"  FAILED {src.name}: {err}")
+
+
+def convert(args):
+    sdocx_dir = Path(args[0]).expanduser() if args else DEFAULT_OUT / "sdocx"
+    pdf_dir = Path(args[1]).expanduser() if len(args) > 1 else sdocx_dir.parent / "pdf"
+    sources = sorted(sdocx_dir.rglob("*.sdocx"))
+    if not sources:
+        sys.exit(f"No .sdocx files found in {sdocx_dir}")
+    to_pdf(sources, sdocx_dir, pdf_dir)
+
+
 def main():
-    if len(sys.argv) > 3 or {"-h", "--help"} & set(sys.argv):
+    if {"-h", "--help"} & set(sys.argv):
         sys.exit(__doc__)
-    backup = Path(sys.argv[1]).expanduser() if len(sys.argv) > 1 else choose_backup()
+    if sys.argv[1:2] == ["--convert"]:
+        if len(sys.argv) > 4:
+            sys.exit(__doc__)
+        return convert(sys.argv[2:])
+    if len(sys.argv) > 3:
+        sys.exit(__doc__)
+    backup =Path(sys.argv[1]).expanduser() if len(sys.argv) > 1 else choose_backup()
     out = Path(sys.argv[2]).expanduser() if len(sys.argv) > 2 else DEFAULT_OUT
     snmm = backup / "SAMSUNGNOTE" / "SamsungNote.SNMM"
     if not snmm.is_file():
@@ -192,24 +233,7 @@ def main():
     shutil.rmtree(work)
     print(f"Extracted {len(written)} of {len(notes)} notes to {sdocx_dir}")
 
-    cli = find_sdocx_cli()
-    if not cli:
-        print("sdocx-cli not found; skipping PDF. Install with:\n"
-              "  cargo install --git https://github.com/twangodev/sdocx sdocx-cli")
-        return
-    pdf_dir = out / "pdf"
-    failed = []
-    for i, src in enumerate(written, 1):
-        dst = pdf_dir / src.relative_to(sdocx_dir).with_suffix(".pdf")
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        r = subprocess.run([cli, str(src), "-o", str(dst)], capture_output=True, text=True)
-        print(f"\r  PDF {i}/{len(written)}", end="", flush=True)
-        if r.returncode != 0 or not dst.exists():
-            failed.append((src, (r.stderr or r.stdout).strip().splitlines()[-1:]))
-    print()
-    print(f"PDFs in {pdf_dir} ({len(written) - len(failed)} ok, {len(failed)} failed)")
-    for src, err in failed:
-        print(f"  FAILED {src.name}: {err}")
+    to_pdf(written, sdocx_dir, out / "pdf")
 
 
 if __name__ == "__main__":
