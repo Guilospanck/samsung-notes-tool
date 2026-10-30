@@ -1,0 +1,20 @@
+# Exported notes and backups are private: never commit them.
+notes-export/
+*.sdocx
+*.pdf
+*.SNMM
+*.bk
+sdoc.zip
+backupHistoryInfo.xml
+ReqItemsInfo.json
+SmartSwitchBackup*.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets and OS files
+.env
+.env.*
+.DS_Store
